@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two-Layer Climate Model with Earth Albedo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: Arial, sans-serif; }
+  canvas { display: block; }
+  .controls { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; font-size: 14px; color: #333; width: 420px; }
+  .ctrl-row { display: flex; align-items: center; gap: 10px; }
+  .ctrl-row label { width: 160px; text-align: right; }
+  .ctrl-row input[type=range] { flex: 1; }
+  .ctrl-row span { width: 60px; font-variant-numeric: tabular-nums; }
+  .info { margin-top: 6px; font-size: 11px; color: #555; text-align: center; line-height: 1.6; max-width: 800px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+  <div class="ctrl-row">
+    <label for="solar">Incident V1:</label>
+    <input type="range" id="solar" min="40" max="140" value="90">
+    <span id="solarVal">90</span>
+  </div>
+  <div class="ctrl-row">
+    <label for="albedo">Atmo albedo (α):</label>
+    <input type="range" id="albedo" min="0" max="95" value="30">
+    <span id="albedoVal">0.30</span>
+  </div>
+  <div class="ctrl-row">
+    <label for="beta">Earth albedo (β):</label>
+    <input type="range" id="beta" min="0" max="95" value="10">
+    <span id="betaVal">0.10</span>
+  </div>
+</div>
+<div class="info" id="info"></div>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 850, H = 700;
+cv.width = W; cv.height = H;
+
+const solarSlider = document.getElementById('solar');
+const albedoSlider = document.getElementById('albedo');
+const betaSlider = document.getElementById('beta');
+const solarValEl = document.getElementById('solarVal');
+const albedoValEl = document.getElementById('albedoVal');
+const betaValEl = document.getElementById('betaVal');
+const infoEl = document.getElementById('info');
+
+function drawArrow(cx, topY, botY, w, color, label, down) {
+  if (w < 2) return;
+  const headH = 20;
+  const headW = Math.min(w * 1.5, w + 30);
+  ctx.fillStyle = color;
+  if (down) {
+    ctx.fillRect(cx - w / 2, topY, w, botY - topY - headH);
+    ctx.beginPath();
+    ctx.moveTo(cx - headW / 2, botY - headH);
+    ctx.lineTo(cx + headW / 2, botY - headH);
+    ctx.lineTo(cx, botY);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillRect(cx - w / 2, topY + headH, w, botY - topY - headH);
+    ctx.beginPath();
+    ctx.moveTo(cx - headW / 2, topY + headH);
+    ctx.lineTo(cx + headW / 2, topY + headH);
+    ctx.lineTo(cx, topY);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (w > 8 && label) {
+    ctx.save();
+    const midY = down ? (topY + botY - headH) / 2 : (topY + headH + botY) / 2;
+    ctx.translate(cx, midY);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = '#fff';
+    const fs = Math.max(8, Math.min(w * 0.33, 16));
+    ctx.font = 'bold ' + fs + 'px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+}
+
+function draw() {
+  const V1 = +solarSlider.value;
+  const a = +albedoSlider.value / 100;
+  const b = +betaSlider.value / 100;
+  solarValEl.textContent = V1;
+  albedoValEl.textContent = a.toFixed(2);
+  betaValEl.textContent = b.toFixed(2);
+
+  const ab = a * b;
+  const denom = 1 - ab;
+  const V2 = V1 * (a + b - 2 * ab) / denom;
+  const V3 = (1 - a) * V1 / denom;
+  const V4 = b * (1 - a) * V1 / denom;
+  const R1 = (1 - b) * (1 - a) * V1 / denom;
+  const R2 = R1;
+  const R3 = 2 * R1;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Geometry
+  const blockW = 650;
+  const blockH = blockW / 8;
+  const bx = (W - blockW) / 2;
+
+  const earthY = H - blockH - 14;
+  const arrowLen = 195;
+  const atmoY = earthY - arrowLen - blockH;
+  const topOfAbove = atmoY - arrowLen;
+
+  // Atmosphere block
+  ctx.fillStyle = 'rgba(135,206,250,0.55)';
+  ctx.fillRect(bx, atmoY, blockW, blockH);
+  ctx.strokeStyle = '#5B9BD5';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(bx, atmoY, blockW, blockH);
+
+  // Earth block
+  ctx.fillStyle = '#6B4226';
+  ctx.fillRect(bx, earthY, blockW, blockH);
+
+  // Block labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#1a5276';
+  ctx.font = 'bold 15px Arial';
+  ctx.fillText('ATMOSPHERE (α=' + a.toFixed(2) + ')', bx + blockW / 2, atmoY + blockH / 2);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 15px Arial';
+  ctx.fillText('EARTH (β=' + b.toFixed(2) + ')', bx + blockW * 0.58, earthY + blockH / 2);
+
+  // Temperatures
+  const Te = 88.210658 * Math.pow(R3, 0.25);
+  const TeCel = Te - 273.15;
+  const TeFah = TeCel * 9 / 5 + 32;
+  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'left';
+  ctx.fillText('T = ' + TeCel.toFixed(1) + ' °C', bx + 10, earthY + blockH / 2 - 8);
+  ctx.fillText('T = ' + TeFah.toFixed(1) + ' °F', bx + 10, earthY + blockH / 2 + 10);
+
+  const Ta = 88.210658 * Math.pow(R1, 0.25);
+  const TaCel = Ta - 273.15;
+  ctx.font = 'bold 12px Arial';
+  ctx.fillStyle = '#1a5276';
+  ctx.textAlign = 'left';
+  ctx.fillText('T = ' + TaCel.toFixed(1) + ' °C', bx + 8, atmoY + blockH / 2);
+
+  ctx.textAlign = 'center';
+
+  // Arrow regions
+  const aboveTop = topOfAbove;
+  const aboveBot = atmoY;
+  const belowTop = atmoY + blockH;
+  const belowBot = earthY;
+
+  // Column layout (7 arrows total):
+  // Above (L to R): V1 down, V2 up, R1 up
+  // Below (L to R): V3 down, V4 up, R3 up, R2 down (R2 under R1)
+  const colA = bx + blockW * 0.12;  // V1 above, V3 below
+  const colB = bx + blockW * 0.30;  // V2 above, V4 below
+  const colD = bx + blockW * 0.58;  // R3 below (between V4 and R2)
+  const colE = bx + blockW * 0.85;  // R1 above, R2 below
+
+  // Above atmosphere
+  drawArrow(colA, aboveTop, aboveBot, V1, '#F5C518', 'Visible', true);
+  drawArrow(colB, aboveTop, aboveBot, V2, '#F5C518', 'Visible', false);
+  drawArrow(colE, aboveTop, aboveBot, R1, '#D32F2F', 'IR', false);
+
+  // Below atmosphere
+  drawArrow(colA, belowTop, belowBot, V3, '#F5C518', 'Visible', true);
+  drawArrow(colB, belowTop, belowBot, V4, '#F5C518', 'Visible', false);
+  drawArrow(colD, belowTop, belowBot, R3, '#CC0000', 'IR', false);
+  drawArrow(colE, belowTop, belowBot, R2, '#D32F2F', 'IR', true);
+
+  // Top labels
+  ctx.font = '11px Arial';
+  ctx.fillStyle = '#B8860B';
+  ctx.fillText('Solar In', colA, aboveTop - 8);
+  if (V2 > 4) { ctx.fillStyle = '#B8860B'; ctx.fillText('Reflected', colB, aboveTop - 8); }
+  if (R1 > 4) { ctx.fillStyle = '#D32F2F'; ctx.fillText('IR Out', colE, aboveTop - 8); }
+
+  // Title
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 19px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Two-Layer Climate Model with Earth Albedo', W / 2, 20);
+
+  // Info
+  const absorbed = (1 - b) * V3;
+  infoEl.innerHTML =
+    `V2 = V1(α+β−2αβ)/(1−αβ) = ${V2.toFixed(1)}  |  ` +
+    `V3 = (1−α)V1/(1−αβ) = ${V3.toFixed(1)}  |  ` +
+    `V4 = β(1−α)V1/(1−αβ) = ${V4.toFixed(1)}  |  ` +
+    `R1 = R2 = ${R1.toFixed(1)}  |  ` +
+    `R3 = ${R3.toFixed(1)}<br>` +
+    `Top-of-atmo check: V1 = V2 + R1 → ${V1.toFixed(1)} = ${(V2 + R1).toFixed(1)} ✓  |  ` +
+    `Earth check: (1−β)V3 + R2 = R3 → ${(absorbed + R2).toFixed(1)} = ${R3.toFixed(1)} ✓  |  ` +
+    `Cavity factor 1/(1−αβ) = ${(1/denom).toFixed(3)}`;
+}
+
+solarSlider.addEventListener('input', draw);
+albedoSlider.addEventListener('input', draw);
+betaSlider.addEventListener('input', draw);
+draw();
+</script>
+</body>
+</html>
